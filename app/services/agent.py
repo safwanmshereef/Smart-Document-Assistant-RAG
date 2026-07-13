@@ -151,6 +151,18 @@ def chat_with_agent(
     result = agent.run(user_message, chat_history)
     output = result.get("output", "")
 
+    # Safely convert output to a clean string if it's returned as a list/dict by some models
+    if isinstance(output, list):
+        text_parts = []
+        for part in output:
+            if isinstance(part, dict) and "text" in part:
+                text_parts.append(part["text"])
+            elif isinstance(part, str):
+                text_parts.append(part)
+        output = "\n".join(text_parts)
+    elif not isinstance(output, str):
+        output = str(output)
+
     # 5. Write the agent's response to the database
     save_chat_message(session_id, "agent", output)
 
