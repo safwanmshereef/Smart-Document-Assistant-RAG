@@ -1,8 +1,11 @@
 import os
 from typing import List, Dict, Any
 
-# Import base LangChain components
-from langchain.agents import create_tool_calling_agent, AgentExecutor
+# Import base LangChain components (with classic agents fallback)
+try:
+    from langchain.agents import create_tool_calling_agent, AgentExecutor
+except ImportError:
+    from langchain_classic.agents import create_tool_calling_agent, AgentExecutor
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 
