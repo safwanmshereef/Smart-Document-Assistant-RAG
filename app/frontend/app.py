@@ -36,7 +36,7 @@ st.markdown("""
         white-space: pre-wrap;
     }
 </style>
-""", unsafe_allowed_html=True)
+""", unsafe_allow_html=True)
 
 # Load Backend URL Dynamically from Environment
 BACKEND_API_URL = os.getenv("BACKEND_API_URL", "http://localhost:8000").rstrip("/")
@@ -89,7 +89,7 @@ with st.sidebar:
                         <span style='font-weight: 600; color: #E2E8F0;'>📄 {doc['filename']}</span><br/>
                         <span style='font-size: 0.8rem; color: #94A3B8;'>Uploaded: {doc['upload_timestamp'][:16].replace('T', ' ')}</span>
                     </div>
-                    """, unsafe_allowed_html=True)
+                    """, unsafe_allow_html=True)
             else:
                 st.info("No documents uploaded yet.")
         else:
@@ -121,7 +121,7 @@ for msg in st.session_state["messages"]:
                 for idx, step in enumerate(msg["reasoning"]):
                     st.markdown(f"**Step {idx+1}:** Called `{step.get('tool')}`")
                     st.json(step.get("tool_input"))
-                    st.markdown(f"""<div class="reasoning-box">{step.get('output')}</div>""", unsafe_allowed_html=True)
+                    st.markdown(f"""<div class="reasoning-box">{step.get('output')}</div>""", unsafe_allow_html=True)
 
 # Capture user prompt
 if prompt := st.chat_input("Ask a question about your documents..."):
@@ -162,7 +162,7 @@ if prompt := st.chat_input("Ask a question about your documents..."):
                             for idx, step in enumerate(reasoning):
                                 st.markdown(f"**Step {idx+1}:** Called `{step.get('tool')}`")
                                 st.json(step.get("tool_input"))
-                                st.markdown(f"""<div class="reasoning-box">{step.get('output')}</div>""", unsafe_allowed_html=True)
+                                st.markdown(f"""<div class="reasoning-box">{step.get('output')}</div>""", unsafe_allow_html=True)
                 else:
                     err_msg = chat_res.json().get('detail', 'Unknown error')
                     st.error(f"Error from assistant: {err_msg}")
