@@ -55,9 +55,14 @@ def get_llm(provider: str, model_name: str, **kwargs: Any) -> BaseChatModel:
                 "GOOGLE_API_KEY is not set in the environment variables."
             )
         
+        # Explicitly default to/use gemini-3.5-flash for free-tier rate limits
+        target_model = model_name if model_name else "gemini-3.5-flash"
+        if target_model in ("gemini-1.5-flash", "gemini-2.5-flash"):
+            target_model = "gemini-3.5-flash"
+
         # Instantiate and return Google GenAI Chat Model
         return ChatGoogleGenerativeAI(
-            model=model_name,
+            model=target_model,
             google_api_key=google_api_key,
             **kwargs
         )
