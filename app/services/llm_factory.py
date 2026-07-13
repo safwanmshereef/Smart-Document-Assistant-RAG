@@ -22,9 +22,8 @@ except ImportError:
 
 # Allowed local models configuration optimized for VRAM/RAM constraints
 VALID_OLLAMA_MODELS = {
-    "llama3.2", 
-    "qwen3.5:4b", 
-    "qwen3.5:2b", 
+    "llama3.2:3b", 
+    "qwen3.5:4b",  
     "qwen3.5:9b", 
     "gemma4:e4b"
 }
@@ -34,10 +33,10 @@ def get_llm(provider: str, model_name: str = None, **kwargs: Any) -> BaseChatMod
     LLM Factory function to return a LangChain ChatModel instance.
 
     Supported Providers:
-    - "google": Google Gemini Models (e.g., gemini-3.5-flash, gemini-2.5-pro).
+    - "google": Google Gemini Models (e.g., gemini-3.5-flash, gemini-2.5-flash-lite, gemini-2.5-flash, gemini-3.1-flash-lite).
                  Requires GOOGLE_API_KEY environment variable.
     - "ollama": Local Ollama Models. Restricted to hardware-safe configurations
-                like "llama3.2", "qwen3.5:4b", and "qwen3.5:2b". Uses OLLAMA_BASE_URL.
+                like "llama3.2:3b", "qwen3.5:4b", and "qwen3.5:2b". Uses OLLAMA_BASE_URL.
 
     Args:
         provider: String indicating the provider ('google' or 'ollama').
@@ -63,7 +62,7 @@ def get_llm(provider: str, model_name: str = None, **kwargs: Any) -> BaseChatMod
         
         # Default to the most cost-effective and capable API model
         if not model_name:
-            model_name = "gemini-3.5-flash"
+            model_name = "gemini-3.1-flash-lite"
             
         # Instantiate and return Google GenAI Chat Model
         return ChatGoogleGenerativeAI(
@@ -75,7 +74,7 @@ def get_llm(provider: str, model_name: str = None, **kwargs: Any) -> BaseChatMod
     elif provider_lower == "ollama":
         # Default to your optimized local model
         if not model_name:
-            model_name = "llama3.2"
+            model_name = "llama3.2:3b"
 
         if model_name not in VALID_OLLAMA_MODELS:
             raise ValueError(

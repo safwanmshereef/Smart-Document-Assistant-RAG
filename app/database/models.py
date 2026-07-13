@@ -41,6 +41,10 @@ class Session(Base):
         default=lambda: str(uuid.uuid4()),
         index=True
     )
+    title: Mapped[str] = mapped_column(
+        String(255),
+        nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, 
         default=datetime.utcnow, 

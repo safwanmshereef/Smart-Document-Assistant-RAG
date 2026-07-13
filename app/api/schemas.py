@@ -21,6 +21,8 @@ class ChatRequest(BaseModel):
     message: str
     provider: str
     model_name: Optional[str] = None
+    selected_doc_name: Optional[str] = None
+    selected_doc_names: Optional[List[str]] = None
 
 
 class ChatResponse(BaseModel):

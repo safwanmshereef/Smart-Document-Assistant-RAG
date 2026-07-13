@@ -13,7 +13,10 @@ except ImportError:
 from langchain_chroma import Chroma
 
 # Base configurations
-PERSIST_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../chroma_db"))
+PERSIST_DIR = os.getenv(
+    "CHROMA_PERSIST_DIR",
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "../../chroma_db"))
+)
 COLLECTION_NAME = "smart_docs"
 
 # Resolve the local cached path to sentence-transformers/all-MiniLM-L6-v2 to run offline
@@ -64,20 +67,54 @@ def ingest_chunks(chunks: List[Document]) -> List[str]:
     ids = vector_store.add_documents(chunks)
     return ids
 
-def retrieve_documents(query: str, top_k: int = 4) -> List[Document]:
+def retrieve_documents(query: str, top_k: int = 4, filenames: List[str] = None) -> List[Document]:
     """
     Performs a similarity search in ChromaDB and returns relevant chunks
-    alongside their citation metadata.
+    alongside their citation metadata. Supports filtering by a list of filenames.
 
     Args:
         query: The search query string.
         top_k: Number of relevant chunks to retrieve.
+        filenames: Optional list of filenames to restrict search to.
 
     Returns:
         A list of retrieved LangChain Document objects.
     """
     vector_store = get_vector_store()
+    if filenames:
+        # Construct ChromaDB metadata filter
+        if len(filenames) == 1:
+            filter_dict = {"source": filenames[0]}
+        else:
+            filter_dict = {"source": {"$in": filenames}}
+
+        # If query is empty/generic, get documents directly by metadata to guarantee we find content
+        if not query or len(query.strip()) < 3:
+            try:
+                results = vector_store._collection.get(where=filter_dict, limit=top_k)
+                if results and results.get("documents"):
+                    docs = []
+                    for i in range(len(results["documents"])):
+                        metadata = results["metadatas"][i] if results.get("metadatas") else {}
+                        docs.append(Document(page_content=results["documents"][i], metadata=metadata))
+                    return docs
+            except Exception:
+                pass
+        return vector_store.similarity_search(query, k=top_k, filter=filter_dict)
     return vector_store.similarity_search(query, k=top_k)
+
+def delete_document_vectors(filename: str) -> None:
+    """
+    Deletes all chunks associated with the given filename from ChromaDB.
+    """
+    try:
+        vector_store = get_vector_store()
+        results = vector_store._collection.get(where={"source": filename})
+        if results and results.get("ids"):
+            vector_store.delete(ids=results["ids"])
+    except Exception as e:
+        # Log error but do not crash
+        print(f"Error deleting ChromaDB vectors for {filename}: {e}")
 
 def clear_vector_store() -> None:
     """

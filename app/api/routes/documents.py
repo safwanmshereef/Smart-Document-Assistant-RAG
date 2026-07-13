@@ -8,7 +8,7 @@ from app.database.config import get_db
 from app.database.models import Document as DbDocument
 from app.api.schemas import DocumentResponse
 from app.services.document_processor import ingest_document
-from app.services.vector_store import ingest_chunks
+from app.services.vector_store import ingest_chunks, delete_document_vectors
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -76,4 +76,36 @@ def list_documents(db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve documents: {str(e)}"
+        )
+
+
+@router.delete("/{document_id}", status_code=status.HTTP_200_OK)
+def delete_document(
+    document_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Deletes an ingested document from both SQLite database and ChromaDB vector store.
+    """
+    doc = db.query(DbDocument).filter(DbDocument.id == document_id).first()
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document with ID '{document_id}' not found."
+        )
+    try:
+        # Delete from ChromaDB
+        delete_document_vectors(doc.filename)
+        # Delete from SQLite
+        db.delete(doc)
+        db.commit()
+        return {
+            "status": "success",
+            "message": f"Document '{doc.filename}' deleted successfully."
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete document: {str(e)}"
         )

@@ -1,4 +1,3 @@
-version: "3.8"
 
 services:
   api:
@@ -13,6 +12,7 @@ services:
     environment:
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - DATABASE_URL=sqlite:////app/db_volume/smart_doc_assistant.db
+      - CHROMA_PERSIST_DIR=/app/chroma_db
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

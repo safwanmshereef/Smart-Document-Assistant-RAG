@@ -12,7 +12,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 # Import internal services
 from sqlalchemy.orm import Session
 from app.services.llm_factory import get_llm
-from app.services.tools import search_documents, calculator, get_current_date_time, web_search, summarize_document_topic
+from app.services.tools import search_documents, calculator, web_search, summarize_document_topic
 from app.database.config import SessionLocal
 from app.database.models import ChatMessage as DbChatMessage
 
@@ -47,18 +47,29 @@ def load_chat_history(session_id: str, db: Session = None) -> List[BaseMessage]:
         if db is None:
             db_session.close()
 
-def save_chat_message(session_id: str, role: str, content: str, db: Session = None) -> None:
+def save_chat_message(session_id: str, role: str, content: str, selected_doc_name: str = None, db: Session = None) -> None:
     """
-    Persists a single chat message into the SQLite database.
-
-    Args:
-        session_id: The active session ID.
-        role: Message role (either 'user' or 'agent').
-        content: The message text content.
-        db: Optional SQLAlchemy Session.
+    Persists a single chat message into the SQLite database. Creates parent Session if missing.
     """
     db_session = db if db is not None else SessionLocal()
     try:
+        from app.database.models import Session as DbSession
+        sess = db_session.query(DbSession).filter(DbSession.id == session_id).first()
+        if not sess:
+            # Generate a friendly title from the user prompt and selected doc name
+            title = ""
+            if selected_doc_name:
+                title = f"{selected_doc_name}: {content[:50]}"
+            else:
+                title = f"{content[:60]}"
+            # Strip extra prompts or garbage characters
+            title = title.replace(" (Please be concise and to the point in your response.)", "")
+            title = title.strip()
+            
+            sess = DbSession(id=session_id, title=title)
+            db_session.add(sess)
+            db_session.flush()
+
         db_message = DbChatMessage(session_id=session_id, role=role, content=content)
         db_session.add(db_message)
         db_session.commit()
@@ -72,12 +83,11 @@ class DocumentAssistantAgent:
     Agent class representing the Smart Document Assistant.
     Orchestrates the LLM, binds tools, and wraps execution inside an AgentExecutor.
     """
-    def __init__(self, provider: str, model_name: str = None):
+    def __init__(self, provider: str, model_name: str = None, selected_doc_name: str = None, selected_doc_names: List[str] = None):
         self.llm = get_llm(provider, model_name)
         self.tools = [
             search_documents,
             calculator,
-            get_current_date_time,
             web_search,
             summarize_document_topic
         ]
@@ -87,6 +97,27 @@ class DocumentAssistantAgent:
             "You are a Smart Document Assistant.\n\n"
             "When answering questions based on documents, you MUST append the exact Source and Page citations "
             "provided by the search tool.\n\n"
+            "CRITICAL: When parsing documents with specifications, breakdowns, or prices for multiple different models or sections, "
+            "be extremely careful with section boundaries and headings. Do NOT associate a specification, price, or data point "
+            "that appears ABOVE a model's section heading with that model. Specifications and prices for a model or section always appear "
+            "BELOW its respective heading.\n\n"
+        )
+        
+        # Merge single and multiple selections
+        files = list(selected_doc_names) if selected_doc_names else []
+        if selected_doc_name and selected_doc_name not in files:
+            files.append(selected_doc_name)
+            
+        if files:
+            docs_str = ", ".join([f"'{f}'" for f in files])
+            system_prompt += (
+                f"The user has currently selected the document(s): {docs_str}. "
+                f"Always prioritize searching and answering from these specific documents. "
+                f"When calling the search_documents or summarize_document_topic tools, pass this exact comma-separated list of filenames "
+                f"('{','.join(files)}') to the tools' filenames parameter to filter results correctly.\n\n"
+            )
+
+        system_prompt += (
             "If the user asks a question and the information is NOT contained in the retrieved documents, "
             "you MUST strictly reply with 'I don't know' or 'The provided documents do not contain this information.' "
             "Do not hallucinate, guess, or use outside knowledge to answer document-specific queries."
@@ -132,33 +163,29 @@ def chat_with_agent(
     user_message: str, 
     provider: str, 
     model_name: str = None,
+    selected_doc_name: str = None,
+    selected_doc_names: List[str] = None,
     db: Session = None
 ) -> Dict[str, Any]:
     """
     Main stateful entry point for interacting with the Smart Document Assistant.
     Retrieves history from SQLite, runs the agentic loop, writes logs back to SQLite,
     and returns final text + reasoning execution traces.
-
-    Args:
-        session_id: Session identifier.
-        user_message: Input text query.
-        provider: LLM Provider ('google' or 'ollama').
-        model_name: Optional custom model name.
-        db: Optional SQLAlchemy Session.
-
-    Returns:
-        A dictionary containing:
-        - "output": The final textual answer.
-        - "reasoning_trace": List of intermediate tool calls with parameters and outputs.
     """
     # 1. Fetch historical logs (excludes the current input message)
     chat_history = load_chat_history(session_id, db=db)
 
-    # 2. Write the user's incoming query to the database
-    save_chat_message(session_id, "user", user_message, db=db)
+    # 2. Write the user's incoming query to the database (automatically creating session if needed)
+    first_doc = selected_doc_names[0] if selected_doc_names else selected_doc_name
+    save_chat_message(session_id, "user", user_message, selected_doc_name=first_doc, db=db)
 
     # 3. Instantiate the agent core
-    agent = DocumentAssistantAgent(provider=provider, model_name=model_name)
+    agent = DocumentAssistantAgent(
+        provider=provider, 
+        model_name=model_name, 
+        selected_doc_name=selected_doc_name, 
+        selected_doc_names=selected_doc_names
+    )
 
     # 4. Invoke the agent execution
     result = agent.run(user_message, chat_history)
@@ -177,7 +204,7 @@ def chat_with_agent(
         output = str(output)
 
     # 5. Write the agent's response to the database
-    save_chat_message(session_id, "agent", output, db=db)
+    save_chat_message(session_id, "agent", output, selected_doc_name=selected_doc_name, db=db)
 
     # 6. Parse reasoning trace
     reasoning_trace = []

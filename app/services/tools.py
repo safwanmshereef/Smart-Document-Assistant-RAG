@@ -48,21 +48,25 @@ def _safe_eval(expr_str: str) -> float:
     return result
 
 @tool
-def search_documents(query: str) -> str:
+def search_documents(query: str, filenames: str = None) -> str:
     """
     Useful for searching the uploaded policy manuals, guidelines, employee handbooks,
     and other corporate documentation to retrieve factual information about the company.
+    If specific documents are the target of the search, pass their filenames as a comma-separated string (e.g. 'doc1.pdf,doc2.pdf').
 
     Args:
         query: The semantic search query targeting policy details.
+        filenames: Optional comma-separated filenames to restrict search to (e.g. 'policy.pdf' or 'report1.pdf,report2.pdf').
 
     Returns:
-        A consolidated text string of the retrieved document chunks with appended source and page citations.
+        A consolidated text string of the retrieved document chunks with appended source and page citations,
+        or 'no relevant informations found for it.' if no matches are found.
     """
     try:
-        docs = retrieve_documents(query, top_k=4)
+        parsed_files = [f.strip() for f in filenames.split(",")] if filenames else None
+        docs = retrieve_documents(query, top_k=4, filenames=parsed_files)
         if not docs:
-            return "No matching corporate documents or policies were found."
+            return "no relevant informations found for it."
 
         results = []
         for doc in docs:
@@ -94,18 +98,7 @@ def calculator(expression: str) -> str:
     except Exception as e:
         return f"Error evaluating expression '{expression}': {str(e)}"
 
-@tool
-def get_current_date_time() -> str:
-    """
-    Useful for retrieving the current local system date and time.
-    Use this tool whenever the user's query refers to relative times such as 'today',
-    'yesterday', 'now', or requires computing dates relative to the current timestamp.
 
-    Returns:
-        The current date and time formatted as a string.
-    """
-    now = datetime.now()
-    return now.strftime("%Y-%m-%d %H:%M:%S")
 
 
 @tool
@@ -139,22 +132,25 @@ def web_search(query: str) -> str:
 
 
 @tool
-def summarize_document_topic(topic: str) -> str:
+def summarize_document_topic(topic: str, filenames: str = None) -> str:
     """
     Useful for retrieving a broad overview, summary, or synthesis of a specific topic,
-    theme, or concept across all uploaded documents.
+    theme, or concept across uploaded documents or specific documents.
     This tool retrieves a larger context window (up to 8 chunks) to extract general themes.
 
     Args:
         topic: The topic, theme, or concept to summarize from the documents.
+        filenames: Optional comma-separated filenames to restrict summary to (e.g. 'doc1.pdf,doc2.pdf').
 
     Returns:
-        A consolidated summary string of retrieved chunks with their source and page metadata.
+        A consolidated summary string of retrieved chunks with their source and page metadata,
+        or 'no relevant informations found for it.' if no matches are found.
     """
     try:
-        docs = retrieve_documents(topic, top_k=8)
+        parsed_files = [f.strip() for f in filenames.split(",")] if filenames else None
+        docs = retrieve_documents(topic, top_k=8, filenames=parsed_files)
         if not docs:
-            return f"No documents containing the topic '{topic}' were found."
+            return "no relevant informations found for it."
 
         results = []
         for doc in docs:

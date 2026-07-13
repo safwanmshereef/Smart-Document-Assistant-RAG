@@ -22,7 +22,7 @@ graph TD
 
 - **Frontend client**: Built with Streamlit, exposing document uploading, metadata registries, real-time message feeds, and expanders showing structural reasoning traces.
 - **API backend**: FastAPI web service using dependency injection (`Depends(get_db)`) to manage SQLite connections and standard `def` execution patterns to prevent blocking the event loop.
-- **Agent core**: ReAct-style LangChain agent leveraging Gemini (`gemini-3.5-flash` or `gemini-3.1-flash-lite`) and local Ollama model options (`llama3.2`).
+- **Agent core**: ReAct-style LangChain agent leveraging Gemini (`gemini-3.5-flash` or `gemini-3.1-flash-lite`) and local Ollama model options (`llama3.2:3b`).
 - **Memory storage**: Persistent SQLite database storing Uploaded Document registries, Sessions, and chronological ChatMessage history.
 - **Semantic retrieval**: ChromaDB persistent vector database utilizing `HuggingFaceEmbeddings` (`all-MiniLM-L6-v2`) to run similarity matches.
 
