@@ -11,7 +11,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 
 # Import internal services
 from app.services.llm_factory import get_llm
-from app.services.tools import search_documents, calculator, get_current_date_time
+from app.services.tools import search_documents, calculator, get_current_date_time, web_search, summarize_document_topic
 from app.database.config import SessionLocal
 from app.database.models import ChatMessage as DbChatMessage
 
@@ -69,7 +69,13 @@ class DocumentAssistantAgent:
     """
     def __init__(self, provider: str, model_name: str = None):
         self.llm = get_llm(provider, model_name)
-        self.tools = [search_documents, calculator, get_current_date_time]
+        self.tools = [
+            search_documents,
+            calculator,
+            get_current_date_time,
+            web_search,
+            summarize_document_topic
+        ]
 
         # Injects the strict anti-hallucination and citation system instructions
         system_prompt = (

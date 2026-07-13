@@ -106,3 +106,62 @@ def get_current_date_time() -> str:
     """
     now = datetime.now()
     return now.strftime("%Y-%m-%d %H:%M:%S")
+
+
+@tool
+def web_search(query: str) -> str:
+    """
+    Useful for searching the live internet using DuckDuckGo to answer questions about
+    current events, real-time facts, news, or general knowledge that is NOT found
+    within the uploaded policy documents.
+
+    Args:
+        query: The search query targeting live web facts.
+
+    Returns:
+        A formatted string of relevant snippets and links from the web search.
+    """
+    try:
+        from duckduckgo_search import DDGS
+        with DDGS() as ddgs:
+            results = ddgs.text(query, max_results=5)
+            if not results:
+                return f"No live search results found for: '{query}'"
+            formatted = []
+            for r in results:
+                title = r.get("title", "No Title")
+                link = r.get("href", "")
+                body = r.get("body", "")
+                formatted.append(f"Title: {title}\nURL: {link}\nSnippet: {body}\n")
+            return "\n---\n".join(formatted)
+    except Exception as e:
+        return f"Error performing web search: {str(e)}"
+
+
+@tool
+def summarize_document_topic(topic: str) -> str:
+    """
+    Useful for retrieving a broad overview, summary, or synthesis of a specific topic,
+    theme, or concept across all uploaded documents.
+    This tool retrieves a larger context window (up to 8 chunks) to extract general themes.
+
+    Args:
+        topic: The topic, theme, or concept to summarize from the documents.
+
+    Returns:
+        A consolidated summary string of retrieved chunks with their source and page metadata.
+    """
+    try:
+        docs = retrieve_documents(topic, top_k=8)
+        if not docs:
+            return f"No documents containing the topic '{topic}' were found."
+
+        results = []
+        for doc in docs:
+            source = doc.metadata.get("source", "unknown file")
+            page = doc.metadata.get("page", 1)
+            results.append(f"Content: {doc.page_content} ... (Source: {source}, Page: {page})\n\n")
+
+        return "".join(results)
+    except Exception as e:
+        return f"Error summarizing document topic: {str(e)}"
