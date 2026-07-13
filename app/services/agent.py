@@ -101,6 +101,9 @@ class DocumentAssistantAgent:
             "be extremely careful with section boundaries and headings. Do NOT associate a specification, price, or data point "
             "that appears ABOVE a model's section heading with that model. Specifications and prices for a model or section always appear "
             "BELOW its respective heading.\n\n"
+            "CRITICAL NUMERIC EXTRACTION RULES:\n"
+            "1. When copying numeric values (such as prices, budgets, limits) from the document for calculations or answers, copy the digits EXACTLY as written. Do not round, guess, or modify any digit.\n"
+            "2. When sending numeric values to the calculator tool, strip all currency symbols (like ₹, $) and separators (like commas or spaces). For example, convert '₹31,54,000' to '3154000' before evaluating.\n\n"
         )
         
         # Merge single and multiple selections

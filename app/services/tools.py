@@ -114,6 +114,53 @@ def web_search(query: str) -> str:
     Returns:
         A formatted string of relevant snippets and links from the web search.
     """
+    # Method 1: HTML scraping (bypasses TLS/API blocks)
+    try:
+        import urllib.parse
+        import requests
+        from bs4 import BeautifulSoup
+
+        url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5"
+        }
+        resp = requests.get(url, headers=headers, timeout=8)
+        if resp.status_code == 200:
+            soup = BeautifulSoup(resp.text, "html.parser")
+            results = []
+            for result in soup.find_all("div", class_="result__body")[:5]:
+                title_tag = result.find("a", class_="result__a")
+                snippet_tag = result.find("a", class_="result__snippet")
+                if title_tag:
+                    title = title_tag.get_text(strip=True)
+                    href = title_tag.get("href", "")
+                    
+                    # Clean redirect URLs (extract direct link from uddg query parameter)
+                    if "uddg=" in href:
+                        parsed_href = urllib.parse.urlparse(href)
+                        params = urllib.parse.parse_qs(parsed_href.query)
+                        if "uddg" in params:
+                            href = params["uddg"][0]
+                    elif href.startswith("//"):
+                        href = "https:" + href
+
+                    snippet = snippet_tag.get_text(strip=True) if snippet_tag else ""
+                    results.append({
+                        "title": title,
+                        "href": href,
+                        "body": snippet
+                    })
+            if results:
+                formatted = []
+                for r in results:
+                    formatted.append(f"Title: {r['title']}\nURL: {r['href']}\nSnippet: {r['body']}\n")
+                return "\n---\n".join(formatted)
+    except Exception:
+        pass
+
+    # Method 2: Fallback to duckduckgo_search library
     try:
         from duckduckgo_search import DDGS
         with DDGS() as ddgs:

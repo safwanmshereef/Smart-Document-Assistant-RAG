@@ -11,6 +11,22 @@ from datetime import datetime
 import requests
 import requests.exceptions
 import streamlit as st
+from datetime import datetime, timedelta
+
+def utc_to_ist(utc_str: str) -> str:
+    """
+    Converts a UTC timestamp string (ISO format) to IST (UTC +5:30) and formats as YYYY-MM-DD HH:MM.
+    """
+    if not utc_str:
+        return ""
+    try:
+        # Strip decimal microseconds and Z if present
+        clean_str = utc_str.split(".")[0].replace("Z", "").replace("T", " ")
+        dt = datetime.strptime(clean_str[:19], "%Y-%m-%d %H:%M:%S")
+        ist_dt = dt + timedelta(hours=5, minutes=30)
+        return ist_dt.strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return utc_str[:16].replace("T", " ")
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Page Config
@@ -27,8 +43,11 @@ st.set_page_config(
 # ──────────────────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-    #MainMenu, footer, header { visibility: hidden; }
-    [data-testid="stDeployButton"] { display: none; }
+    #MainMenu { visibility: hidden; }
+    footer { visibility: hidden; }
+    [data-testid="stDeployButton"] { display: none !important; }
+    /* Always show the sidebar collapse/expand toggle */
+    [data-testid="collapsedControl"] { display: flex !important; visibility: visible !important; }
     html, body, [class*="css"] { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; }
 
     [data-testid="stSidebar"] {
@@ -152,7 +171,7 @@ st.markdown("""
     .toolbar-anchor { display: none; }
     
     /* Target ONLY the horizontal block (columns) that is the sibling of our toolbar anchor */
-    div.element-container:has(.toolbar-anchor) + div.element-container div[data-testid="stHorizontalBlock"] {
+    div[data-testid="element-container"]:has(.toolbar-anchor) ~ div[data-testid="element-container"] div[data-testid="stHorizontalBlock"] {
         position: fixed !important;
         bottom: 34px !important; /* Positioned inside the input text field bottom bar */
         left: 50% !important;
@@ -170,20 +189,20 @@ st.markdown("""
     }
     
     /* Target columns inside the floating toolbar */
-    div.element-container:has(.toolbar-anchor) + div.element-container div[data-testid="stHorizontalBlock"] [data-testid="column"] {
+    div[data-testid="element-container"]:has(.toolbar-anchor) ~ div[data-testid="element-container"] div[data-testid="stHorizontalBlock"] [data-testid="column"] {
         width: auto !important;
         flex: none !important;
         pointer-events: auto !important;
     }
 
     /* Make the right-hand column display buttons inline-row */
-    div.element-container:has(.toolbar-anchor) + div.element-container div[data-testid="stHorizontalBlock"] [data-testid="column"]:last-child [data-testid="stVerticalBlock"] {
+    div[data-testid="element-container"]:has(.toolbar-anchor) ~ div[data-testid="element-container"] div[data-testid="stHorizontalBlock"] [data-testid="column"]:last-child [data-testid="stVerticalBlock"] {
         display: flex !important;
         flex-direction: row !important;
         gap: 6px !important;
     }
     
-    div.element-container:has(.toolbar-anchor) + div.element-container div[data-testid="stHorizontalBlock"] button {
+    div[data-testid="element-container"]:has(.toolbar-anchor) ~ div[data-testid="element-container"] div[data-testid="stHorizontalBlock"] button {
         pointer-events: auto !important;
         background-color: #1E293B !important;
         color: #CBD5E1 !important;
@@ -198,7 +217,7 @@ st.markdown("""
         box-shadow: 0 1px 3px rgba(0,0,0,0.3) !important;
     }
     
-    div.element-container:has(.toolbar-anchor) + div.element-container div[data-testid="stHorizontalBlock"] button:hover {
+    div[data-testid="element-container"]:has(.toolbar-anchor) ~ div[data-testid="element-container"] div[data-testid="stHorizontalBlock"] button:hover {
         background-color: #334155 !important;
         border-color: #4F8BF9 !important;
         color: #FFF !important;
@@ -513,6 +532,21 @@ with st.sidebar:
     elif not docs_list:
         st.info("No documents uploaded yet.")
     else:
+        if "doc_page" not in st.session_state:
+            st.session_state["doc_page"] = 0
+            
+        doc_page_size = 5
+        total_docs = len(docs_list)
+        total_doc_pages = math.ceil(total_docs / doc_page_size)
+        
+        if st.session_state["doc_page"] >= total_doc_pages:
+            st.session_state["doc_page"] = max(0, total_doc_pages - 1)
+            
+        current_doc_page = st.session_state["doc_page"]
+        start_idx = current_doc_page * doc_page_size
+        end_idx = start_idx + doc_page_size
+        page_docs = docs_list[start_idx:end_idx]
+
         # Select All / Clear Selection Action Buttons
         col_all1, col_all2 = st.columns(2)
         with col_all1:
@@ -526,8 +560,8 @@ with st.sidebar:
                 st.session_state["selected_doc_names"] = set()
                 st.rerun()
 
-        for doc in docs_list:
-            ts = doc.get("upload_timestamp", "")[:16].replace("T", " ")
+        for doc in page_docs:
+            ts = utc_to_ist(doc.get("upload_timestamp", ""))
             fname = doc["filename"]
             doc_id = doc["id"]
             is_selected = doc_id in st.session_state["selected_docs"]
@@ -565,6 +599,26 @@ with st.sidebar:
                             detail = del_resp.json().get("detail", "Error deleting") if del_resp else "API offline"
                             st.error(f"Failed: {detail}")
 
+        # Sidebar Document Pagination Controls Row
+        if total_doc_pages > 1:
+            st.markdown('<div style="margin-top:6px;"></div>', unsafe_allow_html=True)
+            col_doc_prev, col_doc_page_num, col_doc_next = st.columns([2, 5, 2])
+            with col_doc_prev:
+                if st.button("◀", key="doc_prev_btn", disabled=(current_doc_page == 0), use_container_width=True, help="Previous page"):
+                    st.session_state["doc_page"] = current_doc_page - 1
+                    st.rerun()
+            with col_doc_page_num:
+                st.markdown(
+                    f'<div style="text-align:center; font-size:0.75rem; color:#94A3B8; line-height:28px; font-weight:500;">'
+                    f'{current_doc_page + 1} / {total_doc_pages}'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+            with col_doc_next:
+                if st.button("▶", key="doc_next_btn", disabled=(current_doc_page == total_doc_pages - 1), use_container_width=True, help="Next page"):
+                    st.session_state["doc_page"] = current_doc_page + 1
+                    st.rerun()
+
         n_selected = len(st.session_state["selected_docs"])
         if n_selected > 0:
             st.success(f"Selected **{n_selected}** document(s)")
@@ -597,10 +651,26 @@ with st.sidebar:
     # Stored Sessions list from DB
     if backend_online and sessions_list:
         st.markdown('<div style="font-size:0.75rem;color:#475569;margin-bottom:4px;">Previous Sessions:</div>', unsafe_allow_html=True)
-        for s in sessions_list:
+        
+        if "session_page" not in st.session_state:
+            st.session_state["session_page"] = 0
+            
+        page_size = 5
+        total_sessions = len(sessions_list)
+        total_pages = math.ceil(total_sessions / page_size)
+        
+        if st.session_state["session_page"] >= total_pages:
+            st.session_state["session_page"] = max(0, total_pages - 1)
+            
+        current_page = st.session_state["session_page"]
+        start_idx = current_page * page_size
+        end_idx = start_idx + page_size
+        page_sessions = sessions_list[start_idx:end_idx]
+
+        for s in page_sessions:
             s_id = s["id"]
             count = s["message_count"]
-            time_str = s["created_at"][:16].replace("T", " ")
+            time_str = utc_to_ist(s.get("created_at", ""))
             is_active = (s_id == active_sess)
             cls_active = "session-card active" if is_active else "session-card"
 
@@ -644,6 +714,26 @@ with st.sidebar:
                         st.rerun()
                     else:
                         st.error("Error deleting session")
+
+        # Sidebar Pagination Controls Row
+        if total_pages > 1:
+            st.markdown('<div style="margin-top:6px;"></div>', unsafe_allow_html=True)
+            col_prev, col_page_num, col_next = st.columns([2, 5, 2])
+            with col_prev:
+                if st.button("◀", key="sess_prev_btn", disabled=(current_page == 0), use_container_width=True, help="Previous page"):
+                    st.session_state["session_page"] = current_page - 1
+                    st.rerun()
+            with col_page_num:
+                st.markdown(
+                    f'<div style="text-align:center; font-size:0.75rem; color:#94A3B8; line-height:28px; font-weight:500;">'
+                    f'{current_page + 1} / {total_pages}'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+            with col_next:
+                if st.button("▶", key="sess_next_btn", disabled=(current_page == total_pages - 1), use_container_width=True, help="Next page"):
+                    st.session_state["session_page"] = current_page + 1
+                    st.rerun()
     elif backend_online:
         st.caption("No saved conversations in DB.")
 

@@ -4,7 +4,7 @@ A production-grade, containerized Retrieval-Augmented Generation (RAG) agentic Q
 
 ---
 
-## 🛠️ Architecture Overview
+## 🛠️ Architecture & Features Overview
 
 The application follows a modular, PEP 8 compliant, service-oriented architecture:
 
@@ -17,14 +17,17 @@ graph TD
     E -->|Search Tool| F[Vector Store: ChromaDB]
     E -->|Math Tool| G[AST-Based Secure Calculator]
     E -->|Live Web Tool| H[DuckDuckGo Search]
-    E -->|Time Tool| I[System Date-Time]
+    E -->|Summary Tool| I[Document Summarizer]
 ```
 
-- **Frontend client**: Built with Streamlit, exposing document uploading, metadata registries, real-time message feeds, and expanders showing structural reasoning traces.
-- **API backend**: FastAPI web service using dependency injection (`Depends(get_db)`) to manage SQLite connections and standard `def` execution patterns to prevent blocking the event loop.
-- **Agent core**: ReAct-style LangChain agent leveraging Gemini (`gemini-3.5-flash` or `gemini-3.1-flash-lite`) and local Ollama model options (`llama3.2:3b`).
-- **Memory storage**: Persistent SQLite database storing Uploaded Document registries, Sessions, and chronological ChatMessage history.
-- **Semantic retrieval**: ChromaDB persistent vector database utilizing `HuggingFaceEmbeddings` (`all-MiniLM-L6-v2`) to run similarity matches.
+### Key Capabilities Built & Verified:
+* **Interactive Frontend**: Rich Streamlit UI featuring a card-style chat input with an embedded model badge and action buttons (Summarize & Web Search) docked right next to the circular send button.
+* **Persistent ChromaDB Vector Store**: Configured with a dedicated Docker volume mount (`CHROMA_PERSIST_DIR`) to prevent data/embedding loss when restarting the IDE or Docker containers.
+* **Local & Cloud Model Switching**: Swap between Google Gemini cloud models and local Ollama models (e.g. `llama3.2:3b`) on-the-fly from the sidebar.
+* **Session Management & Auto-Naming**: Generates readable chat session titles using the user's initial question and selected PDF filename. Supports reloading history, loading previous chats, and permanent deletion.
+* **Sidebar Session Pagination**: Limits the displayed history to **5 sessions per page** with a navigation footer (`◀`, `X / Y`, `▶`) to keep the sidebar compact.
+* **Ingested Document Registry**: Upload PDF or TXT files, view upload times in **Indian Standard Time (IST)**, toggle selections via "Select All" / "Clear All" for targeted RAG retrieval, and delete files permanently.
+* **Token Usage Dashboard**: Real-time session token counter with a **Concise Mode** toggle to trim response lengths and save cloud costs.
 
 ---
 
@@ -32,15 +35,15 @@ graph TD
 
 ### 1. Chunking Strategy (RecursiveCharacterTextSplitter)
 - **Choice**: `RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)`.
-- **Justification**: Using character-recursive splitting ensures semantic continuity across paragraph boundaries. A `200` character overlap guarantees context isn't lost at boundaries, preserving the semantic coherence required by the embedding model.
+- **Justification**: Using character-recursive splitting ensures semantic continuity across paragraph boundaries. A `200` character overlap guarantees context isn't lost at boundaries, preserving semantic coherence.
 
 ### 2. Embedding Model (all-MiniLM-L6-v2)
 - **Choice**: `sentence-transformers/all-MiniLM-L6-v2` (384-dimensional).
-- **Justification**: Offers a balance of execution speed and quality. By resolving local cache directories (at `~/.cache/huggingface`), it runs fully local, bypassing network dependencies and protecting local VRAM/RAM constraints.
+- **Justification**: Offers a balance of execution speed and quality. By resolving local cache directories, it runs fully offline, bypassing network dependencies and protecting host VRAM/RAM constraints.
 
-### 3. Agent Framework (ReAct Tool-Calling)
+### 3. Agent Framework & Math Guardrails
 - **Choice**: LangChain Tool-Calling Agent (`create_tool_calling_agent`).
-- **Justification**: Standard ReAct architectures allow the model to reason about what tools to invoke. By returning intermediate steps, we can expose the complete reasoning trace to users. Docstrings are prompt-engineered to enforce input formatting (e.g. preventing calculator text-injection vulnerabilities).
+- **Justification**: ReAct architectures allow the model to reason about what tools to invoke. We implemented strict numeric extraction guidelines in the system prompt to force local models to copy numbers verbatim and strip currency delimiters (e.g. converting `₹31,54,000` to `3154000`) before evaluations, preventing math hallucinations.
 
 ---
 
@@ -61,6 +64,7 @@ Ensure you have [Docker](https://www.docker.com/) and Docker Compose installed.
    ```bash
    docker-compose up --build
    ```
+   *(Note: The Dockerfile uses optimized layer caching. Base dependencies like PyTorch are isolated on their own layer, making incremental builds take under 10 seconds!)*
 
 3. **Access Applications**:
    - **Streamlit Frontend**: [http://localhost:8501](http://localhost:8501)
@@ -102,42 +106,20 @@ Ensure you have [Docker](https://www.docker.com/) and Docker Compose installed.
 
 ---
 
-## 🧪 Verification Runs
-
-Verification suites are included in the root directory:
-- Run **FastAPI Backend verification**: `python verify_phase_4.py`
-- Run **Stateful Agent loop verification**: `python verify_phase_3.py`
-
----
-
 ## 💬 Sample Queries to Test
 
 1. **Multi-Tool Budget RAG Calculation**:
-   > "What is 15% of the corporate Q3 marketing budget mentioned in the document guidelines?"
+   > "whats the overall on road prices when combined all the 3 cars together"
    *(Triggers `search_documents` followed by `calculator`)*
 
 2. **Out-of-Context Refusal (Anti-Hallucination)**:
    > "What is the CEO's favorite color?"
-   *(Triggers `search_documents` and returns "I don't know" refusal language)*
+   *(Triggers `search_documents` and returns "no relevant informations found for it" refusal language)*
 
 3. **Live Web Search**:
-   > "What is the current stock price of Apple (AAPL)?"
-   *(Triggers `web_search` to query live web data)*
+   > "What is the current box office collection of Demon Slayer Infinity Castle?"
+   *(Triggers `web_search` which uses a requests-based BeautifulSoup parser to bypass DuckDuckGo API blocking)*
 
 4. **Document Topic Summarization**:
-   > "Provide a broad summary of the corporate marketing strategies mentioned in the policies."
-   *(Triggers `summarize_document_topic` using a larger top_k chunk retrieval window)*
-
-5. **Local Datetime Reference**:
-   > "What is the current date and time?"
-   *(Triggers `get_current_date_time`)*
-
----
-
-## ⚠️ Known Limitations & Future Roadmap
-
-If provided with more development time, the following improvements would be prioritized:
-1. **Vector Scale**: Transition ChromaDB to an enterprise pgvector PostgreSQL service for distributed querying.
-2. **Caching Layer**: Integrate Redis to cache common semantic queries and avoid redundant LLM invocations.
-3. **Async Streaming**: Implement FastAPI WebSockets or Server-Sent Events (SSE) to stream the agent's textual response character-by-character.
-4. **Enhanced Security**: Deploy an API gateway with rate-limiting, authentication tokens, and payload filtering.
+   > "Provide a detailed, structured summary of the selected document."
+   *(Triggers `summarize_document_topic` using a larger chunk retrieval window)*
