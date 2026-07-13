@@ -10,26 +10,28 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 
 # Import internal services
+from sqlalchemy.orm import Session
 from app.services.llm_factory import get_llm
 from app.services.tools import search_documents, calculator, get_current_date_time, web_search, summarize_document_topic
 from app.database.config import SessionLocal
 from app.database.models import ChatMessage as DbChatMessage
 
-def load_chat_history(session_id: str) -> List[BaseMessage]:
+def load_chat_history(session_id: str, db: Session = None) -> List[BaseMessage]:
     """
     Retrieves all past messages for a session from the SQLite database
     and formats them as LangChain human/AI messages.
 
     Args:
         session_id: The session ID to fetch history for.
+        db: Optional SQLAlchemy Session.
 
     Returns:
         A list of LangChain BaseMessage objects representing the session history.
     """
-    db = SessionLocal()
+    db_session = db if db is not None else SessionLocal()
     try:
         db_messages = (
-            db.query(DbChatMessage)
+            db_session.query(DbChatMessage)
             .filter(DbChatMessage.session_id == session_id)
             .order_by(DbChatMessage.timestamp.asc())
             .all()
@@ -42,9 +44,10 @@ def load_chat_history(session_id: str) -> List[BaseMessage]:
                 history.append(AIMessage(content=msg.content))
         return history
     finally:
-        db.close()
+        if db is None:
+            db_session.close()
 
-def save_chat_message(session_id: str, role: str, content: str) -> None:
+def save_chat_message(session_id: str, role: str, content: str, db: Session = None) -> None:
     """
     Persists a single chat message into the SQLite database.
 
@@ -52,14 +55,16 @@ def save_chat_message(session_id: str, role: str, content: str) -> None:
         session_id: The active session ID.
         role: Message role (either 'user' or 'agent').
         content: The message text content.
+        db: Optional SQLAlchemy Session.
     """
-    db = SessionLocal()
+    db_session = db if db is not None else SessionLocal()
     try:
         db_message = DbChatMessage(session_id=session_id, role=role, content=content)
-        db.add(db_message)
-        db.commit()
+        db_session.add(db_message)
+        db_session.commit()
     finally:
-        db.close()
+        if db is None:
+            db_session.close()
 
 
 class DocumentAssistantAgent:
@@ -126,7 +131,8 @@ def chat_with_agent(
     session_id: str, 
     user_message: str, 
     provider: str, 
-    model_name: str = None
+    model_name: str = None,
+    db: Session = None
 ) -> Dict[str, Any]:
     """
     Main stateful entry point for interacting with the Smart Document Assistant.
@@ -138,6 +144,7 @@ def chat_with_agent(
         user_message: Input text query.
         provider: LLM Provider ('google' or 'ollama').
         model_name: Optional custom model name.
+        db: Optional SQLAlchemy Session.
 
     Returns:
         A dictionary containing:
@@ -145,10 +152,10 @@ def chat_with_agent(
         - "reasoning_trace": List of intermediate tool calls with parameters and outputs.
     """
     # 1. Fetch historical logs (excludes the current input message)
-    chat_history = load_chat_history(session_id)
+    chat_history = load_chat_history(session_id, db=db)
 
     # 2. Write the user's incoming query to the database
-    save_chat_message(session_id, "user", user_message)
+    save_chat_message(session_id, "user", user_message, db=db)
 
     # 3. Instantiate the agent core
     agent = DocumentAssistantAgent(provider=provider, model_name=model_name)
@@ -170,7 +177,7 @@ def chat_with_agent(
         output = str(output)
 
     # 5. Write the agent's response to the database
-    save_chat_message(session_id, "agent", output)
+    save_chat_message(session_id, "agent", output, db=db)
 
     # 6. Parse reasoning trace
     reasoning_trace = []
