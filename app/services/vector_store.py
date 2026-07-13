@@ -10,11 +10,7 @@ try:
 except ImportError:
     from langchain_community.embeddings import HuggingFaceEmbeddings
 
-# Fallback for ChromaDB VectorStore to ensure version compatibility
-try:
-    from langchain_chroma import Chroma
-except ImportError:
-    from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 
 # Base configurations
 PERSIST_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../chroma_db"))
