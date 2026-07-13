@@ -4,28 +4,31 @@ from langchain_core.documents import Document
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from sqlalchemy.orm import Session
 from app.database.config import SessionLocal
 from app.database.models import Document as DbDocument
 
-def save_document_metadata(filename: str) -> str:
+def save_document_metadata(filename: str, db: Session = None) -> str:
     """
     Saves document metadata to SQLite database and returns the generated UUID.
 
     Args:
         filename: The original file name.
+        db: Optional SQLAlchemy Session.
 
     Returns:
         The generated UUID string of the Document record in the database.
     """
-    db = SessionLocal()
+    db_session = db if db is not None else SessionLocal()
     try:
         db_doc = DbDocument(filename=filename)
-        db.add(db_doc)
-        db.commit()
-        db.refresh(db_doc)
+        db_session.add(db_doc)
+        db_session.commit()
+        db_session.refresh(db_doc)
         return db_doc.id
     finally:
-        db.close()
+        if db is None:
+            db_session.close()
 
 def process_document(file_path: str, filename: str) -> List[Document]:
     """
@@ -109,7 +112,8 @@ def ingest_document(
     file_path: str, 
     filename: str, 
     chunk_size: int = 1000, 
-    chunk_overlap: int = 200
+    chunk_overlap: int = 200,
+    db: Session = None
 ) -> Tuple[str, List[Document]]:
     """
     Orchestrates the full document ingestion process:
@@ -123,6 +127,7 @@ def ingest_document(
         filename: Original file name.
         chunk_size: Document split chunk size.
         chunk_overlap: Document split chunk overlap.
+        db: Optional SQLAlchemy Session.
 
     Returns:
         A tuple of (sqlite_document_id, chunked_documents).
@@ -134,7 +139,7 @@ def ingest_document(
     chunks = chunk_document_text(docs, chunk_size, chunk_overlap)
     
     # 3. Save metadata to relational database
-    db_id = save_document_metadata(filename)
+    db_id = save_document_metadata(filename, db=db)
     
     # 4. Attach relational database ID to the chunks' metadata as a citation attribute
     for chunk in chunks:

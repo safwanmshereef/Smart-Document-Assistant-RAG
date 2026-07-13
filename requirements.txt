@@ -13,3 +13,4 @@ pypdf>=4.0.0
 sentence-transformers>=2.2.2
 langchain-huggingface>=0.0.1
 duckduckgo-search>=6.0.0
+python-multipart>=0.0.9
