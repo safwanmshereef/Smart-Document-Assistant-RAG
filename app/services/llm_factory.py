@@ -20,22 +20,28 @@ except ImportError:
     except ImportError:
         from langchain_community.chat_models.ollama import ChatOllama
 
-# Allowed local models configuration for local Ollama setup
-VALID_OLLAMA_MODELS = {"qwen3.5:9b", "gemma4:e4b"}
+# Allowed local models configuration optimized for VRAM/RAM constraints
+VALID_OLLAMA_MODELS = {
+    "llama3.2", 
+    "qwen3.5:4b", 
+    "qwen3.5:2b", 
+    "qwen3.5:9b", 
+    "gemma4:e4b"
+}
 
-def get_llm(provider: str, model_name: str, **kwargs: Any) -> BaseChatModel:
+def get_llm(provider: str, model_name: str = None, **kwargs: Any) -> BaseChatModel:
     """
     LLM Factory function to return a LangChain ChatModel instance.
 
     Supported Providers:
-    - "google": Google Gemini Models (e.g., gemini-1.5-flash, gemini-1.5-pro).
-               Requires GOOGLE_API_KEY environment variable.
-    - "ollama": Local Ollama Models. Currently validates and restricts models
-                to "qwen3.5:9b" and "gemma4:e4b". Uses OLLAMA_BASE_URL.
+    - "google": Google Gemini Models (e.g., gemini-3.5-flash, gemini-2.5-pro).
+                 Requires GOOGLE_API_KEY environment variable.
+    - "ollama": Local Ollama Models. Restricted to hardware-safe configurations
+                like "llama3.2", "qwen3.5:4b", and "qwen3.5:2b". Uses OLLAMA_BASE_URL.
 
     Args:
         provider: String indicating the provider ('google' or 'ollama').
-        model_name: Name of the model to instantiate.
+        model_name: Name of the model to instantiate. Defaults to optimized choices.
         **kwargs: Additional parameters (temperature, max_tokens, etc.) to pass
                   to the model initializer.
 
@@ -55,32 +61,41 @@ def get_llm(provider: str, model_name: str, **kwargs: Any) -> BaseChatModel:
                 "GOOGLE_API_KEY is not set in the environment variables."
             )
         
-        # Explicitly default to/use gemini-3.5-flash for free-tier rate limits
-        target_model = model_name if model_name else "gemini-3.5-flash"
-        if target_model in ("gemini-1.5-flash", "gemini-2.5-flash"):
-            target_model = "gemini-3.5-flash"
-
+        # Default to the most cost-effective and capable API model
+        if not model_name:
+            model_name = "gemini-3.5-flash"
+            
         # Instantiate and return Google GenAI Chat Model
         return ChatGoogleGenerativeAI(
-            model=target_model,
+            model=model_name,
             google_api_key=google_api_key,
             **kwargs
         )
 
     elif provider_lower == "ollama":
+        # Default to your optimized local model
+        if not model_name:
+            model_name = "llama3.2"
+
         if model_name not in VALID_OLLAMA_MODELS:
             raise ValueError(
                 f"Unsupported local Ollama model: '{model_name}'. "
-                f"Allowed models: {sorted(list(VALID_OLLAMA_MODELS))}"
+                f"Allowed hardware-optimized models: {sorted(list(VALID_OLLAMA_MODELS))}"
             )
         
         # Read the OLLAMA_BASE_URL (fallback to standard local server)
         base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
+        # Extract or apply strict hardware guards to protect 8GB system RAM
+        num_ctx = kwargs.pop("num_ctx", 4096)
+        temperature = kwargs.pop("temperature", 0.1)
+
         # Instantiate and return ChatOllama Model
         return ChatOllama(
             model=model_name,
             base_url=base_url,
+            num_ctx=num_ctx,
+            temperature=temperature,
             **kwargs
         )
 
