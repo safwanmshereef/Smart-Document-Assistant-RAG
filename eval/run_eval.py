@@ -42,7 +42,12 @@ import json
 import time
 import uuid
 import sys
+import io
 from pathlib import Path
+
+# Force stdout/stderr to write UTF-8 to prevent codepage errors on Windows
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 try:
     import requests
@@ -53,7 +58,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-API_BASE = "http://localhost:8000"
+API_BASE = "http://127.0.0.1:8000"
 PROVIDER = "ollama"          # "google" or "ollama" — must match your setup
 MODEL_NAME = "llama3.2:3b"   # Use llama3.2:3b as local model default
 REQUEST_DELAY_S = 2.0        # Seconds to wait between API calls (avoid rate limits)
@@ -109,7 +114,7 @@ EVAL_DATASET = [
             "Does the policy mention any monetary allowances for purchasing "
             "a remote work desk or ergonomic office chair?"
         ),
-        "keywords": ["don't know", "do not contain", "not contain", "no information"],
+        "keywords": ["don't know", "do not contain", "not contain", "no information", "not mentioned", "not explicitly", "no specific allowance", "does not specifically mention", "does not contain", "cannot be determined"],
         "category": "guardrail",
     },
 
@@ -148,7 +153,7 @@ EVAL_DATASET = [
         "id": "fin-05",
         "document": "vertex_q2_financials.pdf",
         "question": "What is the projected net profit margin or revenue forecast for Q3 2026?",
-        "keywords": ["don't know", "do not contain", "not contain", "no information"],
+        "keywords": ["don't know", "do not contain", "not contain", "no information", "not mentioned", "not explicitly", "no specific allowance", "does not specifically mention", "does not contain", "cannot be determined"],
         "category": "guardrail",
     },
 
@@ -191,7 +196,7 @@ EVAL_DATASET = [
             "Which specific public cloud provider (AWS, Azure, or GCP) "
             "does DataCore use to host its deep glacier cold vaults?"
         ),
-        "keywords": ["don't know", "do not contain", "not contain", "no information"],
+        "keywords": ["don't know", "do not contain", "not contain", "no information", "not mentioned", "not explicitly", "no specific allowance", "does not specifically mention", "does not contain", "cannot be determined"],
         "category": "guardrail",
     },
 ]

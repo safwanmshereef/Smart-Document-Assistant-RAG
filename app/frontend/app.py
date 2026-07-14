@@ -4,6 +4,7 @@ Smart Document Assistant – Production Streamlit Frontend
 """
 
 import os
+import re
 import uuid
 import math
 from datetime import datetime
@@ -388,6 +389,58 @@ def _tool_badge(tool_name: str) -> str:
     }
     icon = icons.get(tool_name, "🔧")
     return f'<span class="tool-badge {cls}">{icon} {tool_name}</span>'
+
+def extract_sources_from_message(msg: dict) -> list:
+    """
+    Extracts unique (Source, Page) tuples from the message content.
+    If none are found in the final content, falls back to the reasoning trace.
+    """
+    sources = set()
+    
+    # 1. Parse content first
+    content_text = msg.get("content", "")
+    if isinstance(content_text, str):
+        # Match (Source: filename, Page: X)
+        matches = re.findall(r"\(Source:\s*([^,\)]+)(?:,\s*Page:\s*([^,\)]+))?\)", content_text, re.IGNORECASE)
+        for match in matches:
+            src = match[0].strip()
+            pg = match[1].strip() if len(match) > 1 and match[1] else None
+            sources.add((src, pg))
+            
+        # Match standalone citations like Source: filename, Page: X
+        matches_text = re.findall(r"Source:\s*([^,\s\n\.\)]+)(?:,\s*Page:\s*(\d+))?", content_text, re.IGNORECASE)
+        for match in matches_text:
+            src = match[0].strip()
+            pg = match[1].strip() if len(match) > 1 and match[1] else None
+            sources.add((src, pg))
+
+    # 2. If no sources were found in the final content, fallback to parsing reasoning steps
+    if not sources:
+        reasoning = msg.get("reasoning", [])
+        if reasoning:
+            for step in reasoning:
+                out_text = step.get("output", "")
+                if not isinstance(out_text, str):
+                    continue
+                matches = re.findall(r"\(Source:\s*([^,\)]+)(?:,\s*Page:\s*([^,\)]+))?\)", out_text, re.IGNORECASE)
+                for match in matches:
+                    src = match[0].strip()
+                    pg = match[1].strip() if len(match) > 1 and match[1] else None
+                    sources.add((src, pg))
+                
+    # Sort and return unique sources
+    result = []
+    seen = set()
+    for src, pg in sorted(sources):
+        # Normalize file extension and check validity
+        if not src.lower().endswith(('.pdf', '.txt', '.md')):
+            continue
+        key = (src.lower(), pg)
+        if key not in seen:
+            seen.add(key)
+            result.append({"source": src, "page": pg})
+            
+    return result
 
 def _render_reasoning(reasoning: list):
     if not reasoning:
@@ -796,6 +849,20 @@ for msg in st.session_state["messages"]:
     avatar = "👤" if msg["role"] == "user" else "🤖"
     with st.chat_message(msg["role"], avatar=avatar):
         st.markdown(msg["content"])
+        
+        # Render extracted sources/references if assistant
+        if msg["role"] == "assistant":
+            sources = extract_sources_from_message(msg)
+            if sources:
+                st.markdown('<div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">'
+                            '<span style="font-size:0.75rem; color:#64748B; font-weight:600; margin-right:4px;">Sources & References:</span>' +
+                            "".join([
+                                f'<span style="background: rgba(79, 139, 249, 0.08); color: #60A5FA; border: 1px solid rgba(79, 139, 249, 0.2); '
+                                f'font-size: 0.72rem; padding: 2px 8px; border-radius: 6px; font-weight: 500; font-family: sans-serif;">'
+                                f'📄 {s["source"]}' + (f' (Pg. {s["page"]})' if s["page"] else "") + '</span>'
+                                for s in sources
+                            ]) + '</div>', unsafe_allow_html=True)
+
         if msg["role"] == "assistant" and msg.get("reasoning"):
             _render_reasoning(msg["reasoning"])
 

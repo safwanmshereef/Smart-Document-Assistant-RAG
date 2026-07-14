@@ -56,7 +56,7 @@ def search_documents(query: str, filenames: str = None) -> str:
 
     Args:
         query: The semantic search query targeting policy details.
-        filenames: Optional comma-separated filenames to restrict search to (e.g. 'policy.pdf' or 'report1.pdf,report2.pdf').
+        filenames: Comma-separated list of filenames to restrict the search to. ONLY pass this if you are explicitly instructed to search specific filenames or if the filenames are present in the selection list. DO NOT guess, assume, or hallucinate filenames (such as 'policy.pdf') if not provided. Leave empty to search all documents.
 
     Returns:
         A consolidated text string of the retrieved document chunks with appended source and page citations,
@@ -105,8 +105,9 @@ def calculator(expression: str) -> str:
 def web_search(query: str) -> str:
     """
     Useful for searching the live internet using DuckDuckGo to answer questions about
-    current events, real-time facts, news, or general knowledge that is NOT found
-    within the uploaded policy documents.
+    current events, real-time facts, news, or general knowledge.
+    CRITICAL: ONLY call this tool if the user has explicitly confirmed or requested a web search in response to a prompt.
+    Do NOT call this tool automatically.
 
     Args:
         query: The search query targeting live web facts.
@@ -187,7 +188,7 @@ def summarize_document_topic(topic: str, filenames: str = None) -> str:
 
     Args:
         topic: The topic, theme, or concept to summarize from the documents.
-        filenames: Optional comma-separated filenames to restrict summary to (e.g. 'doc1.pdf,doc2.pdf').
+        filenames: Comma-separated list of filenames to restrict the summary to. ONLY pass this if you are explicitly instructed to summarize specific filenames or if the filenames are present in the selection list. DO NOT guess, assume, or hallucinate filenames (such as 'doc1.pdf') if not provided. Leave empty to search all documents.
 
     Returns:
         A consolidated summary string of retrieved chunks with their source and page metadata,

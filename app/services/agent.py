@@ -83,27 +83,33 @@ class DocumentAssistantAgent:
     Agent class representing the Smart Document Assistant.
     Orchestrates the LLM, binds tools, and wraps execution inside an AgentExecutor.
     """
-    def __init__(self, provider: str, model_name: str = None, selected_doc_name: str = None, selected_doc_names: List[str] = None):
+    def __init__(self, provider: str, model_name: str = None, selected_doc_name: str = None, selected_doc_names: List[str] = None, enable_web_search: bool = False):
         self.llm = get_llm(provider, model_name)
+        
+        # Dynamically enable web_search ONLY if explicitly authorized
         self.tools = [
             search_documents,
             calculator,
-            web_search,
             summarize_document_topic
         ]
+        if enable_web_search:
+            self.tools.append(web_search)
 
         # Injects the strict anti-hallucination and citation system instructions
         system_prompt = (
             "You are a Smart Document Assistant.\n\n"
+            "FIRST STEP RULE:\n"
+            "For every single query, you MUST start in Step 1 by calling search_documents (or summarize_document_topic) to retrieve relevant facts from the files. You are strictly forbidden from calling the calculator tool, calling web_search, or outputting a final answer directly in Step 1 without first calling search_documents.\n\n"
             "When answering questions based on documents, you MUST append the exact Source and Page citations "
             "provided by the search tool.\n\n"
             "CRITICAL: When parsing documents with specifications, breakdowns, or prices for multiple different models or sections, "
             "be extremely careful with section boundaries and headings. Do NOT associate a specification, price, or data point "
             "that appears ABOVE a model's section heading with that model. Specifications and prices for a model or section always appear "
             "BELOW its respective heading.\n\n"
-            "CRITICAL NUMERIC EXTRACTION RULES:\n"
+            "CRITICAL NUMERIC EXTRACTION & CALCULATION RULES:\n"
             "1. When copying numeric values (such as prices, budgets, limits) from the document for calculations or answers, copy the digits EXACTLY as written. Do not round, guess, or modify any digit.\n"
-            "2. When sending numeric values to the calculator tool, strip all currency symbols (like ₹, $) and separators (like commas or spaces). For example, convert '₹31,54,000' to '3154000' before evaluating.\n\n"
+            "2. When sending numeric values to the calculator tool, strip all currency symbols (like ₹, $) and separators (like commas or spaces). For example, convert '₹31,54,000' to '3154000' before evaluating.\n"
+            "3. Only call the calculator tool if actual arithmetic operations (such as addition, subtraction, multiplication, division) are required to obtain the answer. If the value, number, or percentage is already explicitly stated in the document, you MUST NOT call the calculator tool. When calling the calculator, do NOT pass letters, words, or variable names (e.g. pass '31000000 + 24000000' instead of 'Revenue - OPEX').\n\n"
         )
         
         # Merge single and multiple selections
@@ -119,11 +125,23 @@ class DocumentAssistantAgent:
                 f"When calling the search_documents or summarize_document_topic tools, pass this exact comma-separated list of filenames "
                 f"('{','.join(files)}') to the tools' filenames parameter to filter results correctly.\n\n"
             )
+        else:
+            system_prompt += (
+                "You have access to a database of uploaded documents. If the user asks a question about "
+                "policies, guidelines, employee handbooks, manuals, financials, or company specs, you MUST use "
+                "the search_documents or summarize_document_topic tools to search for answers across the entire library. "
+                "When calling these tools, omit the filenames parameter (or pass None) to search all documents.\n\n"
+            )
 
         system_prompt += (
-            "If the user asks a question and the information is NOT contained in the retrieved documents, "
-            "you MUST strictly reply with 'I don't know' or 'The provided documents do not contain this information.' "
-            "Do not hallucinate, guess, or use outside knowledge to answer document-specific queries."
+            "CRITICAL WEB SEARCH GUARDRAIL & REFUSAL SYSTEM:\n"
+            "1. You are strictly forbidden from calling the web_search tool automatically or on your own initiative.\n"
+            "2. If you search the documents and cannot find the answer (for example, if the retrieved chunks do not contain the answer, or search_documents returns no matches), you MUST NOT call the web_search tool. Instead, you MUST immediately stop and reply to the user with this exact wording:\n"
+            "'The provided documents do not contain this information. This info is not available in any documents uploaded. Do you want to search the web and get the summary or details?'\n"
+            "3. If the answer is found in the retrieved documents, you MUST answer the question accurately using the documents and provide source/page citations. Do NOT use the refusal phrase if the information is present.\n"
+            "4. Only invoke the web_search tool if the user explicitly responds with 'yes', 'sure', 'go ahead', 'search the web', or similar authorization in their subsequent message.\n"
+            "5. If the user explicitly asks for a web search from the very beginning, you may use the web_search tool immediately.\n"
+            "6. Do not hallucinate, guess, or use outside knowledge to answer document-specific queries."
         )
 
         prompt = ChatPromptTemplate.from_messages([
@@ -182,12 +200,30 @@ def chat_with_agent(
     first_doc = selected_doc_names[0] if selected_doc_names else selected_doc_name
     save_chat_message(session_id, "user", user_message, selected_doc_name=first_doc, db=db)
 
+    # Determine if web search is authorized by checking the query and history
+    enable_web_search = False
+    
+    # Check if user explicitly asked for web search in current message
+    user_msg_lower = user_message.lower()
+    explicit_keywords = ["search the web", "search web", "web search", "search the internet", "google search", "duckduckgo"]
+    if any(kw in user_msg_lower for kw in explicit_keywords):
+        enable_web_search = True
+        
+    # Check if the previous agent response asked to search the web, and user replied yes/okay
+    if not enable_web_search and chat_history:
+        last_msg = chat_history[-1]
+        if isinstance(last_msg, AIMessage) and "do you want to search the web" in last_msg.content.lower():
+            confirm_keywords = ["yes", "yep", "sure", "go ahead", "ok", "okay", "please", "do it", "search"]
+            if any(kw in user_msg_lower for kw in confirm_keywords):
+                enable_web_search = True
+
     # 3. Instantiate the agent core
     agent = DocumentAssistantAgent(
         provider=provider, 
         model_name=model_name, 
         selected_doc_name=selected_doc_name, 
-        selected_doc_names=selected_doc_names
+        selected_doc_names=selected_doc_names,
+        enable_web_search=enable_web_search
     )
 
     # 4. Invoke the agent execution
