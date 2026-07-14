@@ -344,8 +344,8 @@ def estimate_tokens(text: str) -> int:
 _DEFAULTS = {
     "session_id": str(uuid.uuid4()),
     "messages": [],
-    "provider": "google",
-    "model_name": GOOGLE_MODELS[0][0],
+    "provider": "ollama",
+    "model_name": "llama3.2:3b",
     "session_tokens": 0,       # tokens used this session
     "total_tokens": 0,         # tokens used all-time this run
     "concise_mode": False,     # smart token saving

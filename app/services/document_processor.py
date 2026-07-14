@@ -32,7 +32,7 @@ def save_document_metadata(filename: str, db: Session = None) -> str:
 
 def process_document(file_path: str, filename: str) -> List[Document]:
     """
-    Loads and extracts text from a file. Supports .pdf and .txt files.
+    Loads and extracts text from a file. Supports .pdf, .txt, and .md files.
     Performs fast-fail validation on file extensions before invoking loaders.
 
     Args:
@@ -43,14 +43,14 @@ def process_document(file_path: str, filename: str) -> List[Document]:
         A list of LangChain Document objects.
 
     Raises:
-        ValueError: If file is not a PDF or TXT.
+        ValueError: If file is not a PDF, TXT, or MD.
         FileNotFoundError: If the file does not exist at file_path.
     """
     # Fast-fail extension check
     _, ext = os.path.splitext(filename.lower())
-    if ext not in (".pdf", ".txt"):
+    if ext not in (".pdf", ".txt", ".md"):
         raise ValueError(
-            f"Unsupported file format: '{ext}'. Only .pdf and .txt files are supported."
+            f"Unsupported file format: '{ext}'. Only .pdf, .txt, and .md files are supported."
         )
 
     if not os.path.exists(file_path):
@@ -60,6 +60,7 @@ def process_document(file_path: str, filename: str) -> List[Document]:
     if ext == ".pdf":
         loader = PyPDFLoader(file_path)
     else:
+        # TextLoader handles both .txt and .md files natively
         loader = TextLoader(file_path, encoding="utf-8")
 
     docs = loader.load()

@@ -18,16 +18,16 @@ def upload_document(
     db: Session = Depends(get_db)
 ):
     """
-    Uploads a document (.pdf or .txt), spools it safely to disk,
+    Uploads a document (.pdf, .txt, or .md), spools it safely to disk,
     processes & chunks it, registers it in the SQLite metadata DB,
     indexes it in ChromaDB, and performs a guaranteed file cleanup on complete.
     """
     filename = file.filename
     ext = os.path.splitext(filename)[1].lower()
-    if ext not in [".pdf", ".txt"]:
+    if ext not in [".pdf", ".txt", ".md"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported file format '{ext}'. Only .pdf and .txt files are supported."
+            detail=f"Unsupported file format '{ext}'. Only .pdf, .txt, and .md files are supported."
         )
 
     temp_path = None

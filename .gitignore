@@ -142,3 +142,10 @@ cython_debug/
 # ChromaDB data storage
 chroma_db/
 **/chroma_db/
+
+# Evaluation run output
+eval/eval_results.json
+
+# Interview prep / personal study documents
+INTERVIEW_PREP_MASTERCLASS.md
+DEMO_VIDEO_SCRIPT.md
